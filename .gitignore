@@ -1,0 +1,7 @@
+out/
+*.html
+*.csv
+*.pfx
+*.cer
+~$*
+.vs/

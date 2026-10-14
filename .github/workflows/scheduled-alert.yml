@@ -1,0 +1,51 @@
+name: Entra credential expiry alert
+
+# Runs unattended on a schedule and pushes a Teams/email alert.
+# No one runs anything by hand - GitHub's hosted runner fires this on the cron below.
+#
+# ONE-TIME SETUP (in your own fork):
+#   1. Create an Entra app registration in YOUR tenant with the Application.Read.All
+#      application permission (grant admin consent). Add Mail.Send too if you use email.
+#   2. Configure certificate (or federated) credentials on it - NOT a client secret.
+#      Easiest: use OIDC federation so no secret is stored (see README).
+#   3. Add repo secrets/variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, and either the
+#      federated-credential setup OR a base64 PFX in APP_CERT_PFX + APP_CERT_PASSWORD.
+#   4. Add TEAMS_WEBHOOK (and/or MAIL_TO + MAIL_FROM).
+# Then it just runs. Adjust the cron and the -DaysWindow to taste.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'        # 07:00 UTC daily
+  workflow_dispatch: {}         # also allow a manual run from the Actions tab
+
+permissions:
+  id-token: write               # for OIDC federation (no stored secret)
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run credential expiry alert
+        shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          TEAMS_WEBHOOK:   ${{ secrets.TEAMS_WEBHOOK }}
+          MAIL_TO:         ${{ secrets.MAIL_TO }}
+          MAIL_FROM:       ${{ secrets.MAIL_FROM }}
+        run: |
+          Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force
+          Install-Module EntraCredentialExpiry -Scope CurrentUser -Force
+
+          # OIDC federation: exchange the GitHub token for a Graph app-only token.
+          $gh = $env:ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          $url = "$($env:ACTIONS_ID_TOKEN_REQUEST_URL)&audience=api://AzureADTokenExchange"
+          $assertion = (Invoke-RestMethod -Uri $url -Headers @{ Authorization = "Bearer $gh" }).value
+          Connect-MgGraph -TenantId $env:AZURE_TENANT_ID -ClientId $env:AZURE_CLIENT_ID `
+                          -ClientAssertion $assertion -NoWelcome
+
+          $p = @{ IncludeServicePrincipals = $true; DaysWindow = 90,60,30,7 }
+          if ($env:TEAMS_WEBHOOK) { $p.TeamsWebhook = $env:TEAMS_WEBHOOK }
+          if ($env:MAIL_TO)       { $p.MailTo = $env:MAIL_TO -split ','; $p.MailFrom = $env:MAIL_FROM }
+          Send-EntraCredentialExpiryAlert @p -Verbose
