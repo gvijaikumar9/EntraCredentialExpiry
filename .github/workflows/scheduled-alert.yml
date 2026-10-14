@@ -1,7 +1,7 @@
 name: Entra credential expiry alert
 
 # Runs unattended on a schedule and pushes a Teams/email alert.
-# No one runs anything by hand - GitHub's hosted runner fires this on the cron below.
+# GitHub's hosted runner fires this on the cron you enable below.
 #
 # ONE-TIME SETUP (in your own fork):
 #   1. Create an Entra app registration in YOUR tenant with the Application.Read.All
@@ -11,12 +11,16 @@ name: Entra credential expiry alert
 #   3. Add repo secrets/variables: AZURE_TENANT_ID, AZURE_CLIENT_ID, and either the
 #      federated-credential setup OR a base64 PFX in APP_CERT_PFX + APP_CERT_PASSWORD.
 #   4. Add TEAMS_WEBHOOK (and/or MAIL_TO + MAIL_FROM).
-# Then it just runs. Adjust the cron and the -DaysWindow to taste.
+#   5. Enable the daily run: uncomment the two `schedule` lines below.
+#
+# The schedule is OPT-IN on purpose. It stays commented so a fresh fork (or this
+# sample repo) does not run a daily job before setup is done and email you a
+# failure every morning. Until you enable it, run it by hand from the Actions tab.
 
 on:
-  schedule:
-    - cron: '0 7 * * *'        # 07:00 UTC daily
-  workflow_dispatch: {}         # also allow a manual run from the Actions tab
+  # schedule:
+  #   - cron: '0 7 * * *'        # 07:00 UTC daily (uncomment after setup)
+  workflow_dispatch: {}         # run manually from the Actions tab
 
 permissions:
   id-token: write               # for OIDC federation (no stored secret)
@@ -35,6 +39,13 @@ jobs:
           MAIL_TO:         ${{ secrets.MAIL_TO }}
           MAIL_FROM:       ${{ secrets.MAIL_FROM }}
         run: |
+          # Config guard: exit cleanly (not a failure) if the fork has not been
+          # set up yet, so a stray run does not report a scary red failure.
+          if (-not $env:AZURE_TENANT_ID -or -not $env:AZURE_CLIENT_ID) {
+            Write-Host "::notice::EntraCredentialExpiry is not configured. Add the AZURE_TENANT_ID and AZURE_CLIENT_ID repo secrets (and TEAMS_WEBHOOK / MAIL_* ) per the README, then enable the schedule. Skipping."
+            exit 0
+          }
+
           Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force
           Install-Module EntraCredentialExpiry -Scope CurrentUser -Force
 

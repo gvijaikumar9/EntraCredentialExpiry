@@ -52,7 +52,7 @@ Get-EntraCredentialExpiry -IncludeServicePrincipals -HtmlPath .\cred-expiry.html
 
 You do not run this by hand every day. You schedule it **once** on a host that is always on, and it pushes an alert when something enters a window. The module is the logic; the host supplies the timer.
 
-**GitHub Actions** (free, no Azure subscription needed): fork this repo and use the ready-made [`.github/workflows/scheduled-alert.yml`](.github/workflows/scheduled-alert.yml). It signs in with OIDC federation (no stored secret), runs daily, and posts to Teams/email. One-time setup steps are in the workflow file.
+**GitHub Actions** (free, no Azure subscription needed): fork this repo and use the ready-made [`.github/workflows/scheduled-alert.yml`](.github/workflows/scheduled-alert.yml). It signs in with OIDC federation (no stored secret) and posts to Teams/email. The one-time setup steps are in the workflow file, and the daily `schedule` is left commented out until you finish them, so uncomment it once your secrets are in place. Until then you can run it by hand from the Actions tab.
 
 **Azure Automation** (if you run Azure): create a runbook with the account's managed identity, paste:
 ```powershell
